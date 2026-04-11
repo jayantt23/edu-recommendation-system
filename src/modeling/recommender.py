@@ -116,7 +116,10 @@ class RecommenderEngine:
                 'content_utility': u_qs,
                 'cf_score': s_cf,
                 'distance': dist,
-                'lambda_u': lambda_u
+                'lambda_u': lambda_u,
+                'norm_enrollment': row.get('norm_enrollment', 0),
+                'latitude': row.get('latitude'),
+                'longitude': row.get('longitude')
             })
             
         return pd.DataFrame(results).sort_values(by='final_score', ascending=False)

@@ -1,21 +1,12 @@
-(recsys) E:\Projects\School RecSys>python src/recommender_cli.py --query "Arts" --lat 34.49 --lon -118.21
-Processing query using LDA model: 'Arts'
+KeyError: "['latitude', 'longitude'] not in index"
 
-Top 5 Recommendations:
-                school_name  final_score   distance
-5521         City of Angels     0.657115  50.758842
-1681           iLEAD Hybrid     0.532618   1.357022
-1373  Granada Hills Charter     0.495473  38.452329
-1812          Highland High     0.492076  11.774799
-1809       Quartz Hill High     0.481584  18.895148
-
-(recsys) E:\Projects\School RecSys>python src/recommender_cli.py --query "STEM and robotics" --lat 34.49 --lon -118.21
-Processing query using LDA model: 'STEM and robotics'
-
-Top 5 Recommendations:
-                school_name  final_score   distance
-5521         City of Angels     0.623531  50.758842
-1681           iLEAD Hybrid     0.499033   1.357022
-1373  Granada Hills Charter     0.461889  38.452329
-1812          Highland High     0.458492  11.774799
-1809       Quartz Hill High     0.448000  18.895148
+File "E:\Projects\School RecSys\src\app.py", line 125, in <module>
+    map_data = top_5[['latitude', 'longitude', 'school_name']].rename(columns={'latitude': 'lat', 'longitude': 'lon'})
+               ~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+File "E:\Projects\School RecSys\recsys\Lib\site-packages\pandas\core\frame.py", line 4384, in __getitem__
+    indexer = self.columns._get_indexer_strict(key, "columns")[1]
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+File "E:\Projects\School RecSys\recsys\Lib\site-packages\pandas\core\indexes\base.py", line 6302, in _get_indexer_strict
+    self._raise_if_missing(keyarr, indexer, axis_name)
+File "E:\Projects\School RecSys\recsys\Lib\site-packages\pandas\core\indexes\base.py", line 6355, in _raise_if_missing
+    raise KeyError(f"{not_found} not in index")
