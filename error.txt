@@ -1,0 +1,21 @@
+(recsys) E:\Projects\School RecSys>python src/recommender_cli.py --query "Arts" --lat 34.49 --lon -118.21
+Processing query using LDA model: 'Arts'
+
+Top 5 Recommendations:
+                school_name  final_score   distance
+5521         City of Angels     0.657115  50.758842
+1681           iLEAD Hybrid     0.532618   1.357022
+1373  Granada Hills Charter     0.495473  38.452329
+1812          Highland High     0.492076  11.774799
+1809       Quartz Hill High     0.481584  18.895148
+
+(recsys) E:\Projects\School RecSys>python src/recommender_cli.py --query "STEM and robotics" --lat 34.49 --lon -118.21
+Processing query using LDA model: 'STEM and robotics'
+
+Top 5 Recommendations:
+                school_name  final_score   distance
+5521         City of Angels     0.623531  50.758842
+1681           iLEAD Hybrid     0.499033   1.357022
+1373  Granada Hills Charter     0.461889  38.452329
+1812          Highland High     0.458492  11.774799
+1809       Quartz Hill High     0.448000  18.895148
