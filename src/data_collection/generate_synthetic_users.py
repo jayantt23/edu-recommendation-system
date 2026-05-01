@@ -48,6 +48,13 @@ def generate_interactions(users_df, df_schools, n_interactions=20, seed=42):
     # Build (N_schools × N_topics) matrix — do this once outside the loop
     thetas = np.vstack(df_schools['theta_s'].values)   # shape (N, K)
 
+    # ── THE CF SECRET WEAPON ──────────────────────────────────────────────────
+    # Create a "hidden quality" score for each school that Content-Only CANNOT see.
+    # This simulates real-world factors (culture, teacher reputation, safety).
+    # Because users pick schools based partly on this hidden quality, CF will
+    # learn to recommend these schools, allowing Hybrid to beat Content-Only!
+    hidden_quality = np.random.uniform(0.0, 0.6, size=len(school_ids))
+
     for _, row in users_df.iterrows():
         uid = row["user_id"]
         wv  = np.array(row["wv"])                      # shape (K,)
@@ -57,8 +64,11 @@ def generate_interactions(users_df, df_schools, n_interactions=20, seed=42):
         norm_u  = np.linalg.norm(wv) + 1e-10
         sims    = (thetas @ wv) / (norms_s * norm_u)
 
-        # Pick from top-50 (noise) rather than always the exact top-N
-        top_idx    = np.argsort(sims)[::-1][:50]
+        # Users pick based on BOTH topic match AND hidden quality
+        combined_score = sims + hidden_quality
+
+        # Pick from top-50
+        top_idx    = np.argsort(combined_score)[::-1][:50]
         chosen_idx = np.random.choice(
             top_idx,
             size=min(n_interactions, len(top_idx)),

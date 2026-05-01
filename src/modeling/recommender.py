@@ -77,7 +77,7 @@ class RecommenderEngine:
             for _, v_row in historical_users_df.iterrows():
                 wv = v_row['wv']
                 sim = np.dot(wu, wv) / (np.linalg.norm(wu) * np.linalg.norm(wv) + 1e-10)
-                if sim > 0.7: # Tau threshold as per Alg 2 step 6 — raised to 0.7 for meaningful neighbours
+                if sim > 0.90: # Very strict tau threshold to prevent lambda_u from maxing out too easily
                     similarities.append((v_row['user_id'], sim))
             
             n_neighbors = len(similarities)
