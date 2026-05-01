@@ -33,4 +33,10 @@ def process_ccd_data(raw_csv_path, output_csv_path):
     print(f"Processed data saved to {output_csv_path}. Total valid schools: {len(df)}")
 
 if __name__ == "__main__":
-    process_ccd_data("../../data/raw/ccd_directory_2021.csv", "../../data/processed/ms_metrics_clean.csv")
+    import os, sys
+    # Works when run from the project root: python src/data_collection/ccd_processor.py
+    root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+    process_ccd_data(
+        os.path.join(root, "data", "raw", "ccd_directory_2021.csv"),
+        os.path.join(root, "data", "processed", "ms_metrics_clean.csv")
+    )

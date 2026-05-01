@@ -2,3 +2,7 @@
 recsys/
 #error.txt
 #School_Recsys.pdf
+data/processed/
+models/
+__pycache__/
+*.pkl

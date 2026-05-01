@@ -77,7 +77,7 @@ class RecommenderEngine:
             for _, v_row in historical_users_df.iterrows():
                 wv = v_row['wv']
                 sim = np.dot(wu, wv) / (np.linalg.norm(wu) * np.linalg.norm(wv) + 1e-10)
-                if sim > 0.5: # Tau threshold as per Alg 2 step 6
+                if sim > 0.7: # Tau threshold as per Alg 2 step 6 — raised to 0.7 for meaningful neighbours
                     similarities.append((v_row['user_id'], sim))
             
             n_neighbors = len(similarities)
@@ -101,7 +101,7 @@ class RecommenderEngine:
             u_qs = self.calculate_content_utility(
                 user_query_theta, 
                 row['theta_s'], 
-                row.get('norm_enrollment', 0.5),
+                row.get('score_met', row.get('norm_enrollment', 0.5)),
                 dist
             )
             
