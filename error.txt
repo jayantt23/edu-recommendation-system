@@ -1,12 +1,64 @@
-KeyError: "['latitude', 'longitude'] not in index"
+(recsys) E:\Projects\School RecSys>python run_full_pipeline.py
 
-File "E:\Projects\School RecSys\src\app.py", line 125, in <module>
-    map_data = top_5[['latitude', 'longitude', 'school_name']].rename(columns={'latitude': 'lat', 'longitude': 'lon'})
-               ~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-File "E:\Projects\School RecSys\recsys\Lib\site-packages\pandas\core\frame.py", line 4384, in __getitem__
-    indexer = self.columns._get_indexer_strict(key, "columns")[1]
-              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-File "E:\Projects\School RecSys\recsys\Lib\site-packages\pandas\core\indexes\base.py", line 6302, in _get_indexer_strict
-    self._raise_if_missing(keyarr, indexer, axis_name)
-File "E:\Projects\School RecSys\recsys\Lib\site-packages\pandas\core\indexes\base.py", line 6355, in _raise_if_missing
-    raise KeyError(f"{not_found} not in index")
+Edu-Recommendation System — Full Pipeline
+=========================================
+
+============================================================
+  Building hybrid dataset (LDA + θ_s + score_met)
+============================================================
+Loaded 9813 schools from data/agent_input.csv
+✅ Enriched fields detected (stem_score, norm_arts, norm_ap_count, norm_world_lang, is_magnet)
+Generating synthetic brochures from school metrics...
+Generated 9813 synthetic brochures.
+Preprocessing 9813 documents...
+100%|██████████████████████████████████████████████████████████████████████████████████████████████████████████| 9813/9813 [00:03<00:00, 2718.81it/s]
+Vectorizing...
+Training LDA with 5 topics...
+Topic 0: computer, science, track, prepare, career, calculus, technology, offering, biotechnology, technologyintegrated
+Topic 1: rich, art, offer, orchestra, classical, ceramic, digital, medium, comprehensive, variety
+Topic 2: community, creativity, advanced, vibrant, artist, renowned, performer, music, theater, coding
+Topic 3: science, rigorous, dedicated, engineering, national, competition, compete, mathematics, pride, excellence
+Topic 4: art, awardwinning, band, choir, department, includes, drama, production, studio, fine
+Inferring topic distributions θ_s for all schools...
+score_met computed using: AP count, Athletes, Arts, STEM, Class size, Magnet
+Pipeline complete! Saved 9813 schools → data/processed\final_hybrid_dataset.pkl
+  score_met range: [0.133, 0.501]
+  Done in 34.7s
+
+============================================================
+  Generating synthetic users + preference-aligned interactions
+============================================================
+Saved 500 synthetic users + preference-aligned interactions → data/processed
+  Users: 500  |  Interactions per user: 20  |  Schools: 9813
+  Done in 1.5s
+
+============================================================
+  Running evaluation (Precision@5, Recall@5, NDCG@5)
+============================================================
+Evaluating K=5  |  users=50  |  schools=9813
+Ground truth: preference-aligned interactions  |  Geo penalty: DISABLED
+
+Model                        |    P@5 |    R@5 |  NDCG@5
+--------------------------------------------------------
+Content-Only (λ_u=0)         | 0.0440 | 0.0110 |  0.0828
+CF-Only (λ_u=1)              | 0.4000 | 0.1000 |  0.7053
+Hybrid (λ_u adaptive)        | 0.4160 | 0.1040 |  0.7191
+--------------------------------------------------------
+
+Ablation complete.
+  Done in 89.9s
+
+✅ Full pipeline complete.
+
+(recsys) E:\Projects\School RecSys>python src/evaluate.py
+Evaluating K=5  |  users=50  |  schools=9813
+Ground truth: preference-aligned interactions  |  Geo penalty: DISABLED
+
+Model                        |    P@5 |    R@5 |  NDCG@5
+--------------------------------------------------------
+Content-Only (λ_u=0)         | 0.0440 | 0.0110 |  0.0828
+CF-Only (λ_u=1)              | 0.4000 | 0.1000 |  0.7053
+Hybrid (λ_u adaptive)        | 0.4160 | 0.1040 |  0.7191
+--------------------------------------------------------
+
+Ablation complete.

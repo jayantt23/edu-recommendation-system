@@ -3,6 +3,7 @@ import pandas as pd
 import numpy as np
 import os
 import sys
+import pickle
 
 # Add project root to sys.path
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -15,167 +16,250 @@ st.set_page_config(page_title="School RecSys", page_icon="🎓", layout="wide")
 
 # --- Constants ---
 DATA_PATH = "data/processed/final_hybrid_dataset.pkl"
+USERS_PATH = "data/processed/synthetic_users.pkl"
+INTERACT_PATH = "data/processed/synthetic_interactions.pkl"
 MODEL_DIR = "models"
 
 # --- Load Data & Models ---
 @st.cache_resource
 def load_resources():
     if not os.path.exists(DATA_PATH):
-        return None, None, None
+        return None, None, None, None, None
+    
     df = pd.read_pickle(DATA_PATH)
     
     # Pre-calculate city centers for easier location picking
     city_centers = df.groupby('city_location')[['latitude', 'longitude']].mean().to_dict('index')
     
-    trainer = LDATrainer()
+    trainer = LDATrainer(n_topics=5)
     if os.path.exists(os.path.join(MODEL_DIR, "lda_model.pkl")):
         trainer.load_model(MODEL_DIR)
-    return df, trainer, city_centers
+    
+    # Load CF Data
+    historical_users_df = None
+    interactions = None
+    if os.path.exists(USERS_PATH) and os.path.exists(INTERACT_PATH):
+        historical_users_df = pd.read_pickle(USERS_PATH)
+        with open(INTERACT_PATH, "rb") as f:
+            interactions = pickle.load(f)
+            
+    return df, trainer, city_centers, historical_users_df, interactions
 
-df, trainer, city_centers = load_resources()
+df, trainer, city_centers, historical_users_df, interactions = load_resources()
 
 # --- Sidebar: User Inputs ---
 st.sidebar.title("🔍 Search Preferences")
 
-# 1. Improved Query Input (Drop-down)
-query_options = {
-    "STEM and Robotics": "Rigorous STEM curriculum with advanced labs in robotics, coding, and biotechnology.",
-    "Performing Arts & Music": "Vibrant arts program offering deep immersion in visual arts, classical music, and theater production.",
-    "Competitive Athletics": "Focus on high participation rate in athletics, fostering leadership and teamwork through competitive sports.",
-    "Academic Excellence & AP": "Personalized academic support and a wide range of advanced AP course offerings.",
-    "Language & Cultural Studies": "Emphasis on cultural immersion and diverse language studies.",
-    "Other (Custom Search)": ""
-}
+# Input Method Toggle
+input_method = st.sidebar.radio("Search Method", ["Text Query", "Preference Sliders"])
 
-selected_label = st.sidebar.selectbox("What are you looking for?", options=list(query_options.keys()))
+if input_method == "Text Query":
+    # 1. Improved Query Input (Drop-down + Text)
+    query_options = {
+        "STEM and Robotics": "Rigorous STEM curriculum with advanced labs in robotics, coding, and biotechnology.",
+        "Performing Arts & Music": "Vibrant arts program offering deep immersion in visual arts, classical music, and theater production.",
+        "Competitive Athletics": "Focus on high participation rate in athletics, fostering leadership and teamwork through competitive sports.",
+        "Academic Excellence & AP": "Personalized academic support and a wide range of advanced AP course offerings.",
+        "Language & Cultural Studies": "Emphasis on cultural immersion and diverse language studies.",
+        "Other (Custom Search)": ""
+    }
 
-if selected_label == "Other (Custom Search)":
-    query = st.sidebar.text_input("Enter your specific interests:", placeholder="e.g. Montessori education")
+    selected_label = st.sidebar.selectbox("What are you looking for?", options=list(query_options.keys()))
+
+    if selected_label == "Other (Custom Search)":
+        query = st.sidebar.text_input("Enter your specific interests:", placeholder="e.g. Montessori education")
+    else:
+        query = query_options[selected_label]
+    
+    theta_q = None
+    if query and trainer:
+        theta_q = trainer.transform(query)[0]
 else:
-    query = query_options[selected_label]
+    # 2. Explicit User Preference Sliders
+    st.sidebar.subheader("Weighted Preferences")
+    stem = st.sidebar.slider("STEM / Robotics", 0.0, 1.0, 0.2)
+    arts = st.sidebar.slider("Arts / Music", 0.0, 1.0, 0.2)
+    athletics = st.sidebar.slider("Athletics / Sports", 0.0, 1.0, 0.2)
+    academics = st.sidebar.slider("Academic / AP", 0.0, 1.0, 0.2)
+    cultural = st.sidebar.slider("Cultural / Language", 0.0, 1.0, 0.2)
+    
+    # Normalize
+    weights = np.array([stem, arts, athletics, academics, cultural])
+    total = weights.sum()
+    if total > 0:
+        theta_q = weights / total
+    else:
+        theta_q = np.full(5, 0.2)
+    query = "Custom Weighted Profile"
 
 st.sidebar.markdown("---")
 
-# 2. Improved Location Input (City Selector)
-st.sidebar.subheader("📍 Where are you?")
+# 3. Location Input
+st.sidebar.subheader("📍 Location & Range")
 if city_centers:
     all_cities = sorted(list(city_centers.keys()))
-    # Default to a well-known city or first in list
     default_city = "Los Angeles" if "Los Angeles" in all_cities else all_cities[0]
-    selected_city = st.sidebar.selectbox("Select your City (California):", all_cities, index=all_cities.index(default_city))
+    selected_city = st.sidebar.selectbox("Select your City:", all_cities, index=all_cities.index(default_city))
     
-    # Allow fine-tuning
     default_lat = city_centers[selected_city]['latitude']
     default_lon = city_centers[selected_city]['longitude']
     
-    lat = st.sidebar.number_input("Fine-tune Latitude", value=float(default_lat), format="%.4f")
-    lon = st.sidebar.number_input("Fine-tune Longitude", value=float(default_lon), format="%.4f")
+    lat = st.sidebar.number_input("Latitude", value=float(default_lat), format="%.4f")
+    lon = st.sidebar.number_input("Longitude", value=float(default_lon), format="%.4f")
 else:
-    lat = st.sidebar.number_input("Your Latitude", value=34.49, format="%.4f")
-    lon = st.sidebar.number_input("Your Longitude", value=-118.21, format="%.4f")
+    lat = st.sidebar.number_input("Your Latitude", value=34.05, format="%.4f")
+    lon = st.sidebar.number_input("Your Longitude", value=-118.24, format="%.4f")
+
+radius_km = st.sidebar.slider("Search Radius (km)", 5, 100, 40)
 
 st.sidebar.markdown("---")
-st.sidebar.subheader("Adjust Importance")
-alpha = st.sidebar.slider("Curriculum Match", 0.0, 1.0, 0.5, help="Matches your selected interest above.")
-beta = st.sidebar.slider("School Scale", 0.0, 1.0, 0.3, help="Prioritizes larger/smaller schools based on administrative metrics.")
-gamma = st.sidebar.slider("Proximity Importance", 0.0, 1.0, 0.2, help="How much you care about the physical distance.")
+
+# 4. Hard Filters
+st.sidebar.subheader("Filters")
+school_levels = ["All", "Elementary", "Middle", "High"]
+selected_level = st.sidebar.selectbox("School Level", school_levels)
+
+st.sidebar.markdown("---")
+st.sidebar.subheader("Algorithm Tuning")
+alpha = st.sidebar.slider("Content Match Weight (α)", 0.0, 1.0, 0.6)
+beta = st.sidebar.slider("School Quality Weight (β)", 0.0, 1.0, 0.4)
+gamma = st.sidebar.slider("Distance Penalty (γ)", 0.0, 1.0, 0.0)
 
 # --- Main App ---
-st.title("🎓 California School Recommender")
-st.markdown(f"**Current Search:** *{selected_label}* in **{selected_city if city_centers else 'Selected Area'}**")
+st.title("🎓 Hybrid School Recommender")
 
 if df is None:
-    st.error("Dataset not found! Please run `python src/main_pipeline.py` first.")
+    st.error("Dataset not found! Please run `python run_full_pipeline.py` first.")
 else:
-    if query:
-        # 1. Process Query
+    # 1. Apply Hard Filters First
+    filtered_df = df.copy()
+    
+    # Radius Filter
+    recommender = RecommenderEngine(alpha=alpha, beta=beta, gamma=gamma, k_target=30, lambda_max=0.8)
+    filtered_df['dist_km'] = filtered_df.apply(lambda r: recommender.haversine(lat, lon, r['latitude'], r['longitude']), axis=1)
+    filtered_df = filtered_df[filtered_df['dist_km'] <= radius_km]
+    
+    # Level Filter
+    if selected_level != "All":
+        # Adjust mapping based on actual data values if needed
+        level_map = {"Elementary": "Elementary", "Middle": "Middle", "High": "High"}
+        filtered_df = filtered_df[filtered_df['school_level'].str.contains(level_map[selected_level], case=False, na=False)]
+
+    if theta_q is not None:
+        # 2. Process Recommendations
         with st.spinner("Analyzing and ranking schools..."):
-            theta_q = trainer.transform(query)[0]
-            recommender = RecommenderEngine(alpha=alpha, beta=beta, gamma=gamma)
-            user_loc = (lat, lon)
+            # CF Proxy: Use theta_q as user preference vector wu
+            wu = theta_q
             
-            # 2. Get Recommendations
-            results = recommender.get_recommendations(theta_q, user_loc, df)
+            # Get Recommendations
+            results = recommender.get_recommendations(
+                user_query_theta = theta_q,
+                user_loc = (lat, lon),
+                candidate_df = filtered_df,
+                wu = wu,
+                historical_users_df = historical_users_df,
+                interactions = interactions
+            )
             top_5 = results.head(5)
 
-        # 3. Display Results
-        st.subheader("Top Matches Near You")
+        # 3. LDA Insights
+        if input_method == "Text Query" and trainer:
+            best_topic_idx = np.argmax(theta_q)
+            feature_names = trainer.vectorizer.get_feature_names_out()
+            top_words = [feature_names[i] for i in trainer.lda.components_[best_topic_idx].argsort()[:-6:-1]]
+            st.success(f"**LDA Interpretation:** Your query matches topics related to: *{', '.join(top_words)}*")
+
+        # 4. Display Results
+        st.subheader(f"Top 5 Matches within {radius_km}km")
         
-        cols = st.columns([1, 1])
-        
-        with cols[0]:
-            for idx, row in top_5.iterrows():
-                with st.expander(f"🏫 {row['school_name']} (Score: {row['final_score']:.3f})"):
-                    st.write(f"📍 **{row.get('city_location', 'Unknown')}**")
-                    st.write(f"📏 **Distance:** {row['distance']:.2f} km")
+        if top_5.empty:
+            st.warning("No schools found matching your criteria. Try increasing the radius or relaxing filters.")
+        else:
+            cols = st.columns([1, 1])
+            
+            with cols[0]:
+                for idx, row in top_5.iterrows():
+                    # Format display
+                    lam = row['lambda_u']
+                    lam_pct = lam / 0.8 # lambda_max is 0.8
                     
-                    # Explain the components
-                    sim_jsd = recommender.get_jsd_similarity(theta_q, row.get('theta_s', [0.2]*5))
-                    st.progress(sim_jsd, text=f"Curriculum Similarity: {sim_jsd:.1%}")
-                    
-                    # Show brochure snippet if available
-                    sid = str(row['ncessch']).zfill(12)
-                    brochure_path = f"data/raw/brochures/{sid}.txt"
-                    if os.path.exists(brochure_path):
-                        with open(brochure_path, "r", encoding="utf-8") as f:
-                            st.info(f"**School Profile:**\n\n{f.read()}")
-        with cols[1]:
-            # Improved Map View with Pydeck
-            import pydeck as pdk
+                    with st.expander(f"🏫 {row['school_name']} (Final Score: {row['final_score']:.3f})"):
+                        c1, c2, c3 = st.columns(3)
+                        c1.metric("Distance", f"{row['distance']:.1f} km")
+                        c2.metric("CF Confidence (λ_u)", f"{row['lambda_u']:.2f}")
+                        c3.metric("Content Score", f"{row['content_utility']:.2f}")
+                        
+                        st.write(f"📍 **{row.get('city_location', 'Unknown')}** | Level: **{row.get('school_level', 'N/A')}**")
+                        
+                        # Progress bar for CF vs Content
+                        st.write(f"**Hybrid Balance:**")
+                        st.progress(lam_pct, text=f"CF Influence: {lam:.2f} / Content Influence: {1-lam:.2f}")
+                        
+                        # Show brochure snippet if available
+                        sid = str(row['ncessch']).zfill(12)
+                        brochure_path = f"data/raw/brochures/{sid}.txt"
+                        if os.path.exists(brochure_path):
+                            with open(brochure_path, "r", encoding="utf-8") as f:
+                                st.info(f"**School Profile:**\n\n{f.read()}")
+            
+            with cols[1]:
+                # Map View
+                import pydeck as pdk
 
-            # Schools data
-            map_data = top_5[['latitude', 'longitude', 'school_name']].copy()
-            map_data['color'] = [[0, 0, 255, 160]] * len(map_data) # Blue for schools
+                # Schools data
+                map_data = top_5[['latitude', 'longitude', 'school_name', 'final_score']].copy()
+                map_data['color'] = [[0, 0, 255, 160]] * len(map_data) # Blue for schools
 
-            # User location
-            user_data = pd.DataFrame({
-                'latitude': [lat],
-                'longitude': [lon],
-                'school_name': ['Your Location'],
-                'color': [[255, 0, 0, 200]] # Red for you
-            })
+                # User location
+                user_data = pd.DataFrame({
+                    'latitude': [lat],
+                    'longitude': [lon],
+                    'school_name': ['Your Location'],
+                    'final_score': [0],
+                    'color': [[255, 0, 0, 200]] # Red for you
+                })
 
-            combined_points = pd.concat([map_data, user_data])
+                combined_points = pd.concat([map_data, user_data])
 
-            st.pydeck_chart(pdk.Deck(
-                map_style='mapbox://styles/mapbox/light-v9',
-                initial_view_state=pdk.ViewState(
-                    latitude=lat,
-                    longitude=lon,
-                    zoom=11,
-                    pitch=0,
-                ),
-                layers=[
-                    pdk.Layer(
-                        'ScatterplotLayer',
-                        data=combined_points,
-                        get_position='[longitude, latitude]',
-                        get_color='color',
-                        get_radius=200,
-                        pickable=True,
+                st.pydeck_chart(pdk.Deck(
+                    map_style='mapbox://styles/mapbox/light-v9',
+                    initial_view_state=pdk.ViewState(
+                        latitude=lat,
+                        longitude=lon,
+                        zoom=10,
+                        pitch=0,
                     ),
-                    pdk.Layer(
-                        'TextLayer',
-                        data=combined_points,
-                        get_position='[longitude, latitude]',
-                        get_text='school_name',
-                        get_size=16,
-                        get_color=[0, 0, 0],
-                        get_alignment_baseline="'bottom'",
-                    )
-                ],
-                tooltip={"text": "{school_name}"}
-            ))
+                    layers=[
+                        pdk.Layer(
+                            'ScatterplotLayer',
+                            data=combined_points,
+                            get_position='[longitude, latitude]',
+                            get_color='color',
+                            get_radius=300,
+                            pickable=True,
+                        ),
+                        pdk.Layer(
+                            'TextLayer',
+                            data=combined_points,
+                            get_position='[longitude, latitude]',
+                            get_text='school_name',
+                            get_size=16,
+                            get_color=[0, 0, 0],
+                            get_alignment_baseline="'bottom'",
+                        )
+                    ],
+                    tooltip={"text": "{school_name}\nScore: {final_score}"}
+                ))
 
     else:
-        st.info("Select a category in the sidebar to begin searching for schools in California.")
+        st.info("Enter a query or adjust sliders in the sidebar to get school recommendations.")
         
         # System Stats
-        st.subheader("Explore Our Data")
-        st.write(f"We have indexed **{len(df)}** schools across **{len(all_cities)}** California cities.")
-        
-        # Display sample from the selected city
         if city_centers:
+            st.subheader("System Overview")
+            st.write(f"Indexing **{len(df)}** schools across California.")
+            st.write(f"Hybrid Engine loaded with **{len(historical_users_df) if historical_users_df is not None else 0}** historical user profiles.")
+            
             city_samples = df[df.city_location == selected_city].head(3)
             st.write(f"Sample schools in **{selected_city}**:")
             st.table(city_samples[['school_name', 'school_level', 'enrollment']])

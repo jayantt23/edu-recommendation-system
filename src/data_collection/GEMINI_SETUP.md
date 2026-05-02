@@ -1,3 +1,4 @@
+
 # 🚀 Gemini Brochure Ingestion Setup Guide
 
 This guide covers how to run the `gemini_brochure_agent.py` script to fetch and summarize real school data using Google's Gemini API and Serper.dev.
