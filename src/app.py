@@ -148,11 +148,10 @@ else:
     if theta_q is not None:
         # 2. Process Recommendations
         with st.spinner("Analyzing and ranking schools..."):
-            # CF Proxy: Use theta_q as user preference vector wu
             wu = theta_q
             
             # Get Recommendations
-            results = recommender.get_recommendations(
+            raw_results = recommender.get_recommendations(
                 user_query_theta = theta_q,
                 user_loc = (lat, lon),
                 candidate_df = filtered_df,
@@ -160,6 +159,11 @@ else:
                 historical_users_df = historical_users_df,
                 interactions = interactions
             )
+            
+            # THE FIX: Merge back with filtered_df to get the missing metadata
+            metadata_cols = ['ncessch', 'city_location', 'school_level', 'enrollment']
+            results = raw_results.merge(filtered_df[metadata_cols], on='ncessch', how='left')
+            
             top_5 = results.head(5)
 
         # 3. LDA Insights

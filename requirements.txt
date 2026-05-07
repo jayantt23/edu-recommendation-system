@@ -1,21 +1,27 @@
-# Core Dependencies
-numpy==2.4.3
-pandas==3.0.1
-requests==2.32.5
-tqdm==4.67.3
+# Core
+numpy==1.26.4
+pandas==2.2.2
+requests==2.32.3
+tqdm==4.66.4
 python-dotenv==1.0.1
 
-# Gemini 2.0 AI Agent
+# AI
 google-genai>=0.3.0
 
-# Search & Scraping
+# Search
 duckduckgo-search>=6.0.0
 googlesearch-python==1.3.0
 
-# PDF & Text Processing
+# PDF & NLP
 pdfplumber==0.11.5
-fuzzywuzzy==0.18.0
-python-Levenshtein==0.26.1
+rapidfuzz==3.9.3
+
+# ML
+scikit-learn>=1.4.2
+scipy>=1.11.4
+
+# Optional
+nltk>=3.8.1
 
 # Jupyter & Dev Environment
 anyio==4.12.1
@@ -45,7 +51,7 @@ httpcore==1.0.9
 httpx==0.28.1
 idna==3.11
 ipykernel==7.2.0
-ipython==9.11.0
+ipython>=8.12.0
 ipython_pygments_lexers==1.1.1
 ipywidgets==8.1.8
 isoduration==20.11.0
@@ -76,7 +82,6 @@ nbclient==0.10.4
 nbconvert==7.17.0
 nbformat==5.10.4
 nest-asyncio==1.6.0
-nltk==3.9.3
 notebook==7.5.5
 notebook_shim==0.2.4
 packaging==26.0
@@ -100,8 +105,6 @@ rfc3339-validator==0.1.4
 rfc3986-validator==0.1.1
 rfc3987-syntax==1.1.0
 rpds-py==0.30.0
-scikit-learn==1.8.0
-scipy==1.17.1
 Send2Trash==2.1.0
 setuptools==82.0.1
 six==1.17.0

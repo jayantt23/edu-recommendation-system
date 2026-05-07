@@ -8,13 +8,21 @@ from tqdm import tqdm
 from src.nlp_pipeline.preprocessor import TextPreprocessor
 
 class LDATrainer:
-    def __init__(self, n_topics=10, max_features=5000):
+    # UPGRADE: Added alpha (doc_topic_prior) and eta (topic_word_prior)
+    def __init__(self, n_topics=5, max_features=5000, alpha=0.1, eta=0.01):
         self.n_topics = n_topics
         self.max_features = max_features
-        self.vectorizer = CountVectorizer(max_df=0.95, min_df=2, max_features=max_features)
+        
+        # UPGRADE: Tightened max_df to 0.85 to aggressively remove "boilerplate" words 
+        # (like "school", "students") that muddy the topics.
+        self.vectorizer = CountVectorizer(max_df=0.85, min_df=2, max_features=max_features)
+        
+        # UPGRADE: Explicit Dirichlet Hyperparameters for Sparse Granularity
         self.lda = LatentDirichletAllocation(
             n_components=n_topics, 
-            max_iter=10, 
+            doc_topic_prior=alpha,  # Alpha: Forces schools to have 1-2 distinct identities
+            topic_word_prior=eta,   # Eta: Forces words to strongly belong to specific topics
+            max_iter=15,            # Slight bump for better convergence
             learning_method='online', 
             random_state=42
         )
@@ -31,7 +39,7 @@ class LDATrainer:
         print("Vectorizing...")
         tf = self.vectorizer.fit_transform(cleaned_docs)
         
-        print(f"Training LDA with {self.n_topics} topics...")
+        print(f"Training LDA with {self.n_topics} topics (Alpha={self.lda.doc_topic_prior}, Eta={self.lda.topic_word_prior})...")
         self.lda.fit(tf)
         
         # Log top words for each topic
@@ -66,7 +74,6 @@ class LDATrainer:
             self.lda = pickle.load(f)
 
 if __name__ == "__main__":
-    # Test with some synthetic data
     docs = [
         "Focus on STEM, robotics, and coding for future engineers.",
         "A strong emphasis on performing arts, dance, and theater.",
@@ -78,6 +85,5 @@ if __name__ == "__main__":
     trainer = LDATrainer(n_topics=5)
     trainer.train(docs)
     
-    # Infer
     dist = trainer.transform("We want a school with coding and robotics.")
-    print(f"Topic Distribution: {dist}")
+    print(f"Topic Distribution: {np.round(dist, 3)}")

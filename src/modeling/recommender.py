@@ -1,15 +1,18 @@
 import numpy as np
 import pandas as pd
 from scipy.spatial.distance import jensenshannon
+from scipy.special import softmax
 from math import radians, cos, sin, asin, sqrt
 
 class RecommenderEngine:
-    def __init__(self, alpha=0.5, beta=0.3, gamma=0.2, k_target=5, lambda_max=0.8):
+    # Added sigma_km for the Gaussian RBF curve (e.g., 15km "sweet spot" radius)
+    def __init__(self, alpha=0.5, beta=0.3, gamma=0.2, k_target=5, lambda_max=0.8, sigma_km=15.0):
         self.alpha = alpha
         self.beta = beta
         self.gamma = gamma
         self.k_target = k_target
         self.lambda_max = lambda_max
+        self.sigma_km = sigma_km
 
     def haversine(self, lat1, lon1, lat2, lon2):
         """Calculate the great circle distance between two points."""
@@ -23,13 +26,10 @@ class RecommenderEngine:
 
     def get_jsd_similarity(self, p, q):
         """Jensen-Shannon Similarity = 1 - JSD."""
-        # Avoid zeros for KL divergence
         p = np.array(p) + 1e-10
         q = np.array(q) + 1e-10
-        # normalize
         p /= p.sum()
         q /= q.sum()
-        # jensenshannon in scipy returns sqrt(JSD)
         js_dist = jensenshannon(p, q)
         return 1 - (js_dist**2)
 
@@ -37,61 +37,48 @@ class RecommenderEngine:
         """U(q, s) = alpha * (1-JSD) + beta * Score_met - gamma * Pen_geo."""
         sim_jsd = self.get_jsd_similarity(theta_q, theta_s)
         
-        # Scale distance to 0-1 penalty (100km max range for normalization example)
-        # In practice, you'd want a more robust decay function
-        pen_geo = min(dist_geo / 100.0, 1.0) 
+        # UPGRADE 1: Gaussian RBF Decay for Spatial Penalty
+        # Yields ~0 at 0km, slowly ramps up, then approaches 1.0 at far distances
+        affinity = np.exp(-(dist_geo**2) / (2 * self.sigma_km**2))
+        pen_geo = 1.0 - affinity 
         
         return self.alpha * sim_jsd + self.beta * score_met - self.gamma * pen_geo
 
-    def calculate_cf_score(self, sim_uv_list, interactions_list):
-        """S_CF(u, s) = weighted average of historical selections."""
-        if not sim_uv_list:
-            return 0
-        
-        numerator = sum(sim * inter for sim, inter in zip(sim_uv_list, interactions_list))
-        denominator = sum(sim_uv_list)
-        
-        return numerator / denominator if denominator > 0 else 0
-
-    def calculate_confidence_factor(self, n_neighbors):
+    def calculate_confidence_factor(self, effective_neighbors):
         """Adaptive Confidence Factor lambda_u."""
-        return self.lambda_max * min(1.0, n_neighbors / self.k_target)
+        return self.lambda_max * min(1.0, effective_neighbors / self.k_target)
 
     def get_recommendations(self, user_query_theta, user_loc, candidate_df, wu=None, historical_users_df=None, interactions=None):
-        """
-        candidate_df: DataFrame with ['ncessch', 'latitude', 'longitude', 'theta_s', 'norm_enrollment']
-        wu: User's preference weight vector (e.g. [stem, arts, athletics, academic, cultural])
-        historical_users_df: DataFrame of previous users with their preference vectors
-        interactions: Dict mapping user_id to set of selected ncessch_ids
-        """
         results = []
-        
-        # 1. Collaborative Filtering Prep
-        n_neighbors = 0
         s_cf_dict = {}
         lambda_u = 0
         
+        # 1. Collaborative Filtering Prep (Strict Threshold Restored)
         if wu is not None and historical_users_df is not None and interactions is not None:
-            # sim(u, v) using cosine similarity as per Eq (3)
             similarities = []
+            
             for _, v_row in historical_users_df.iterrows():
                 wv = v_row['wv']
+                # Calculate Cosine Similarity
                 sim = np.dot(wu, wv) / (np.linalg.norm(wu) * np.linalg.norm(wv) + 1e-10)
-                if sim > 0.90: # Very strict tau threshold to prevent lambda_u from maxing out too easily
+                
+                # RESTORED: The Strict Neighborhood Threshold
+                if sim >= 0.85: # You can use 0.90, but 0.85 provides a tiny bit more CF coverage without letting in noise
                     similarities.append((v_row['user_id'], sim))
             
             n_neighbors = len(similarities)
+            # The lambda_u now correctly scales based ONLY on highly trusted peers
             lambda_u = self.calculate_confidence_factor(n_neighbors)
             
             if n_neighbors > 0:
-                # Calculate S_CF(u, s) for each school that neighbors interacted with
                 for sid in candidate_df['ncessch']:
                     sim_sum = 0
                     weighted_sum = 0
                     for uid, sim in similarities:
-                        interacted = 1 if sid in interactions.get(uid, []) else 0
+                        interacted = 1 if sid in interactions.get(uid, set()) else 0
                         weighted_sum += sim * interacted
                         sim_sum += sim
+                    
                     s_cf_dict[sid] = weighted_sum / sim_sum if sim_sum > 0 else 0
 
         # 2. Hybrid Scoring
@@ -106,7 +93,6 @@ class RecommenderEngine:
             )
             
             s_cf = s_cf_dict.get(sid, 0)
-            
             final_score = (1 - lambda_u) * u_qs + lambda_u * s_cf
             
             results.append({
@@ -123,10 +109,3 @@ class RecommenderEngine:
             })
             
         return pd.DataFrame(results).sort_values(by='final_score', ascending=False)
-
-if __name__ == "__main__":
-    # Small test
-    recommender = RecommenderEngine()
-    theta_q = [0.8, 0.1, 0.1]
-    theta_s = [0.7, 0.2, 0.1]
-    print(f"Content Utility Test: {recommender.calculate_content_utility(theta_q, theta_s, 0.9, 10)}")
