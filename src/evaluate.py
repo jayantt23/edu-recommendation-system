@@ -54,14 +54,11 @@ def recall_at_k(recommended_ids, relevant_ids, k):
 
 # ── Core evaluation loop ─────────────────────────────────────────────────────
 
-def run_evaluation(recommender, df, users_df, interactions, k, n_test, seed):
+def run_evaluation(recommender, df, test_users_df, historical_users_df, interactions, k):
     """Returns (mean_precision, mean_recall, mean_ndcg)."""
-    np.random.seed(seed)
-    test_users = users_df.sample(n=min(n_test, len(users_df)), random_state=seed)
-
     precisions, recalls, ndcgs = [], [], []
 
-    for _, user in test_users.iterrows():
+    for _, user in test_users_df.iterrows():
         uid         = user['user_id']
         wu          = user['wv']
         theta_q     = wu
@@ -69,13 +66,15 @@ def run_evaluation(recommender, df, users_df, interactions, k, n_test, seed):
         relevant_ids = interactions.get(uid, set())
         if not relevant_ids:
             continue
+            
+        hist_df = historical_users_df[historical_users_df['user_id'] != uid] if not historical_users_df.empty else historical_users_df
 
         results = recommender.get_recommendations(
             user_query_theta    = theta_q,
             user_loc            = user_loc,
             candidate_df        = df,
             wu                  = wu,
-            historical_users_df = users_df[users_df['user_id'] != uid],
+            historical_users_df = hist_df,
             interactions        = interactions,
         )
 
@@ -106,21 +105,45 @@ def evaluate(k=5, n_test_users=50, seed=42):
 
     # ── Ablation study ─────────────────────────────────────────────────────
     configs = {
-        "Content-Only (λ_u=0)":    RecommenderEngine(alpha=0.5, beta=0.3, gamma=0.0, k_target=5, lambda_max=0.0),
-        "CF-Only (λ_u=1)":         RecommenderEngine(alpha=0.5, beta=0.3, gamma=0.0, k_target=5, lambda_max=1.0),
-        "Hybrid (λ_u adaptive)":   RecommenderEngine(alpha=0.5, beta=0.3, gamma=0.0, k_target=5, lambda_max=0.8),
+        "Content-Only (λ_u=0)":    RecommenderEngine(alpha=0.8, beta=0.2, gamma=0.0, k_target=30, lambda_max=0.0),
+        "CF-Only (λ_u=1)":         RecommenderEngine(alpha=0.8, beta=0.2, gamma=0.0, k_target=30, lambda_max=1.0),
+        "Hybrid (λ_u adaptive)":   RecommenderEngine(alpha=0.8, beta=0.2, gamma=0.0, k_target=30, lambda_max=0.8),
     }
 
+    print("\n=== 1. STANDARD ABLATION STUDY (Full User History) ===")
     header = f"{'Model':<28} | {'P@'+str(k):>6} | {'R@'+str(k):>6} | {'NDCG@'+str(k):>7}"
     print(header)
     print("-" * len(header))
 
+    test_users_df = users_df.sample(n=min(n_test_users, len(users_df)), random_state=seed)
+
     for name, rec in configs.items():
-        p, r, n = run_evaluation(rec, df, users_df, interactions, k, n_test_users, seed)
+        p, r, n = run_evaluation(rec, df, test_users_df, users_df, interactions, k)
         print(f"{name:<28} | {p:>6.4f} | {r:>6.4f} | {n:>7.4f}")
 
     print("-" * len(header))
-    print("\nAblation complete.")
+
+    # ── Cold Start Simulation ──────────────────────────────────────────────
+    print("\n=== 2. COLD-START SIMULATION (System Evolution) ===")
+    print("Testing the Hybrid model as the platform grows from 0 users to 500 users.")
+    print("Notice how performance scales as CF kicks in.")
+    
+    history_sizes = [0, 10, 50, 499]
+    hybrid_rec = RecommenderEngine(alpha=0.8, beta=0.2, gamma=0.0, k_target=30, lambda_max=0.8)
+    
+    header_cold = f"{'Historical Users Available':<28} | {'P@'+str(k):>6} | {'R@'+str(k):>6} | {'NDCG@'+str(k):>7}"
+    print(header_cold)
+    print("-" * len(header_cold))
+
+    for size in history_sizes:
+        # Artificially limit the historical data
+        limited_users_df = users_df.head(size) if size > 0 else pd.DataFrame(columns=users_df.columns)
+        p, r, n = run_evaluation(hybrid_rec, df, test_users_df, limited_users_df, interactions, k)
+        label = f"{size} Users (Cold Start)" if size == 0 else f"{size} Users"
+        print(f"{label:<28} | {p:>6.4f} | {r:>6.4f} | {n:>7.4f}")
+
+    print("-" * len(header_cold))
+    print("\nEvaluation complete.")
 
 
 if __name__ == "__main__":

@@ -20,8 +20,8 @@ INTERACT_PATH = "data/processed/synthetic_interactions.pkl"
 # gamma=0   : geo penalty removed — distance shown for info only, not penalised
 # k_target=30: lambda_u = 0.8 × (n_neighbors/30) → ramps up slowly as CF data grows
 #              New/cold-start users with wu=None → lambda_u=0 → pure content
-ALPHA      = 0.6   # topic similarity weight
-BETA       = 0.4   # school quality (score_met) weight
+ALPHA      = 0.8   # topic similarity weight
+BETA       = 0.2   # school quality (score_met) weight
 GAMMA      = 0.0   # geo penalty DISABLED
 K_TARGET   = 30    # neighbours needed for full CF confidence (dynamic lambda_u)
 LAMBDA_MAX = 0.8   # max CF weight (only hit when ≥30 similar neighbours found)

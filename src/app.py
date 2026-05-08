@@ -121,8 +121,8 @@ selected_level = st.sidebar.selectbox("School Level", school_levels)
 
 st.sidebar.markdown("---")
 st.sidebar.subheader("Algorithm Tuning")
-alpha = st.sidebar.slider("Content Match Weight (α)", 0.0, 1.0, 0.6)
-beta = st.sidebar.slider("School Quality Weight (β)", 0.0, 1.0, 0.4)
+alpha = st.sidebar.slider("Content Match Weight (α)", 0.0, 1.0, 0.8)
+beta = st.sidebar.slider("School Quality Weight (β)", 0.0, 1.0, 0.2)
 gamma = st.sidebar.slider("Distance Penalty (γ)", 0.0, 1.0, 0.0)
 
 # --- Main App ---
