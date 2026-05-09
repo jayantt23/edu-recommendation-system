@@ -12,6 +12,7 @@ Run from project root:
 import subprocess
 import sys
 import time
+import os
 
 STEPS = [
     ("Building hybrid dataset (LDA + θ_s + score_met)",
@@ -22,12 +23,15 @@ STEPS = [
      [sys.executable, "src/evaluate.py"]),
 ]
 
-def run_step(label, cmd):
+def run_step(label, cmd, env):
     print(f"\n{'='*60}")
     print(f"  {label}")
     print(f"{'='*60}")
     t0 = time.time()
-    result = subprocess.run(cmd, check=False)
+    
+    # Run the subprocess with the FROZEN environment
+    result = subprocess.run(cmd, env=env, check=False)
+    
     elapsed = time.time() - t0
     if result.returncode != 0:
         print(f"\n[ERROR] Step failed (exit code {result.returncode}). Stopping.")
@@ -37,6 +41,10 @@ def run_step(label, cmd):
 if __name__ == "__main__":
     print("\nEdu-Recommendation System — Full Pipeline")
     print("=========================================")
+    
+    frozen_env = os.environ.copy()
+    frozen_env["PYTHONHASHSEED"] = "0"
+    
     for label, cmd in STEPS:
-        run_step(label, cmd)
+        run_step(label, cmd, frozen_env)
     print("\n✅ Full pipeline complete.")

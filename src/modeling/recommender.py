@@ -6,13 +6,14 @@ from math import radians, cos, sin, asin, sqrt
 
 class RecommenderEngine:
     # Added sigma_km for the Gaussian RBF curve (e.g., 15km "sweet spot" radius)
-    def __init__(self, alpha=0.5, beta=0.3, gamma=0.2, k_target=5, lambda_max=0.8, sigma_km=15.0):
+    def __init__(self, alpha=0.5, beta=0.3, gamma=0.2, k_target=5, lambda_max=0.8, sigma_km=15.0, hard_switch=False):
         self.alpha = alpha
         self.beta = beta
         self.gamma = gamma
         self.k_target = k_target
         self.lambda_max = lambda_max
         self.sigma_km = sigma_km
+        self.hard_switch = hard_switch
 
     def haversine(self, lat1, lon1, lat2, lon2):
         """Calculate the great circle distance between two points."""
@@ -67,8 +68,12 @@ class RecommenderEngine:
                     similarities.append((v_row['user_id'], sim))
             
             n_neighbors = len(similarities)
-            # The lambda_u now correctly scales based ONLY on highly trusted peers
-            lambda_u = self.calculate_confidence_factor(n_neighbors)
+            if self.hard_switch:
+                # Boolean Baseline: 100% CF if ANY neighbors exist, else 100% Content
+                lambda_u = 1.0 if n_neighbors > 0 else 0.0
+            else:
+                # The Paper's Continuous Adaptive Curve
+                lambda_u = self.calculate_confidence_factor(n_neighbors)
             
             if n_neighbors > 0:
                 for sid in candidate_df['ncessch']:
