@@ -141,9 +141,10 @@ else:
     
     # Level Filter
     if selected_level != "All":
-        # Adjust mapping based on actual data values if needed
-        level_map = {"Elementary": "Elementary", "Middle": "Middle", "High": "High"}
-        filtered_df = filtered_df[filtered_df['school_level'].str.contains(level_map[selected_level], case=False, na=False)]
+        level_val_map = {"Elementary": 1, "Middle": 2, "High": 3}
+        target_val = level_val_map.get(selected_level)
+        if target_val:
+            filtered_df = filtered_df[filtered_df['school_level'] == target_val]
 
     if theta_q is not None:
         # 2. Process Recommendations
@@ -161,7 +162,11 @@ else:
             )
             
             # THE FIX: Merge back with filtered_df to get the missing metadata
-            metadata_cols = ['ncessch', 'city_location', 'school_level', 'enrollment']
+            metadata_cols = [
+                'ncessch', 'city_location', 'school_level', 'enrollment', 
+                'theta_s', 'ap_count', 'total_athletes', 'student_teacher_ratio',
+                'stem_score', 'arts_participants', 'world_lang'
+            ]
             results = raw_results.merge(filtered_df[metadata_cols], on='ncessch', how='left')
             
             top_5 = results.head(5)
@@ -193,18 +198,94 @@ else:
                         c2.metric("CF Confidence (λ_u)", f"{row['lambda_u']:.2f}")
                         c3.metric("Content Score", f"{row['content_utility']:.2f}")
                         
-                        st.write(f"📍 **{row.get('city_location', 'Unknown')}** | Level: **{row.get('school_level', 'N/A')}**")
+                        # Map Level ID to Text
+                        level_names = {1: "Elementary", 2: "Middle", 3: "High", 4: "Other", 7: "K-12"}
+                        level_text = level_names.get(row.get('school_level'), "N/A")
+                        
+                        st.write(f"📍 **{row.get('city_location', 'Unknown')}** | Level: **{level_text}**")
                         
                         # Progress bar for CF vs Content
                         st.write(f"**Hybrid Balance:**")
                         st.progress(lam_pct, text=f"CF Influence: {lam:.2f} / Content Influence: {1-lam:.2f}")
+
+                        # --- NEW: Unique Strength/Weakness Analysis ---
+                        st.markdown("---")
+                        st.write("#### 🎯 Strengths & Specializations")
                         
-                        # Show brochure snippet if available
-                        sid = str(row['ncessch']).zfill(12)
-                        brochure_path = f"data/raw/brochures/{sid}.txt"
-                        if os.path.exists(brochure_path):
-                            with open(brochure_path, "r", encoding="utf-8") as f:
-                                st.info(f"**School Profile:**\n\n{f.read()}")
+                        if 'theta_s' in row and trainer:
+                            theta_s = row['theta_s']
+                            feature_names = trainer.vectorizer.get_feature_names_out()
+                            
+                            # Get top 2 topics for the school
+                            top_topics = np.argsort(theta_s)[::-1][:2]
+                            
+                            s_cols = st.columns(2)
+                            for i, t_idx in enumerate(top_topics):
+                                if theta_s[t_idx] > 0.1: # Significant topic
+                                    top_words = [feature_names[w_idx] for w_idx in trainer.lda.components_[t_idx].argsort()[:-4:-1]]
+                                    strength_label = "Primary Focus" if i == 0 else "Secondary Focus"
+                                    s_cols[i].write(f"**{strength_label}:**\n{', '.join(top_words).title()}")
+
+                        # --- NEW: Hyper-Unique Narrative Profile ---
+                        st.markdown("---")
+                        st.write("#### 📝 School Profile")
+                        
+                        narrative = []
+                        
+                        # 1. Academic & AP Context (Granular)
+                        ap_val = int(row.get('ap_count', 0))
+                        if ap_val > 25:
+                            narrative.append(f"**{row['school_name']}** stands as an elite academic institution with a massive catalog of {ap_val} AP subjects.")
+                        elif ap_val > 10:
+                            narrative.append(f"**{row['school_name']}** offers a competitive college-prep environment featuring {ap_val} distinct AP pathways.")
+                        elif ap_val > 0:
+                            narrative.append(f"Academic offerings at **{row['school_name']}** include {ap_val} specialized AP courses alongside core requirements.")
+                        else:
+                            narrative.append(f"**{row['school_name']}** prioritizes a foundational curriculum with focused individual student tracking.")
+
+                        # 2. STEM & Technical (Relative)
+                        stem_score = row.get('stem_score', 0)
+                        if stem_score > 0.8:
+                            narrative.append("The campus is recognized for its high-tech STEM labs and rigorous science initiatives.")
+                        elif stem_score > 0.4:
+                            narrative.append("Students here benefit from a balanced integration of technology and science in daily learning.")
+
+                        # 3. Athletics & Engagement
+                        athletes = int(row.get('total_athletes', 0))
+                        enrollment = int(row.get('enrollment', 1))
+                        participation_rate = (athletes / enrollment) if enrollment > 0 else 0
+                        
+                        if athletes > 200:
+                            narrative.append(f"With {athletes} active athletes, the school's sports culture is a defining pillar of student life.")
+                        elif participation_rate > 0.3:
+                            narrative.append(f"A high percentage of the student body ({participation_rate:.0%}) is involved in the school's diverse athletic programs.")
+
+                        # 4. Arts & Humanities
+                        arts = row.get('arts_participants', 0)
+                        if arts > 100:
+                            narrative.append(f"The arts program is exceptionally large, with {arts} students engaged in creative and performing productions.")
+                        elif arts > 20:
+                            narrative.append("The school maintains active visual and performing arts electives for creative development.")
+
+                        # 5. Support & Environment
+                        st_ratio = row.get('student_teacher_ratio', 0)
+                        if 0 < st_ratio < 12:
+                            narrative.append(f"Instruction is highly personalized, facilitated by an intimate {st_ratio:.1f}:1 student-teacher ratio.")
+                        elif st_ratio > 22:
+                            narrative.append(f"The school manages a larger, more social environment with a {st_ratio:.1f}:1 ratio, focusing on collaborative learning.")
+
+                        # Final output with a fallback that is still somewhat unique to the level
+                        if not narrative:
+                            level_map = {1: "elementary-focused", 2: "middle-school", 3: "high-school prep"}
+                            narrative.append(f"This is a {level_map.get(row.get('school_level'), 'specialized')} campus serving the {row.get('city_location', 'local')} community.")
+
+                        st.write(" ".join(narrative))
+
+                        st.write("#### 📊 Key Metrics")
+                        m1, m2, m3 = st.columns(3)
+                        m1.metric("AP Courses", ap_val)
+                        m2.metric("Athletics", athletes)
+                        m3.metric("S/T Ratio", f"{st_ratio:.1f}:1")
             
             with cols[1]:
                 # Map View
