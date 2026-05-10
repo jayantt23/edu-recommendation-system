@@ -167,8 +167,10 @@ def evaluate(k=5, n_test_users=50, seed=42):
     # We will test the three main competitors across time
     cold_models = [
         ("ALS Matrix Factorization", None), 
+        ("Content-Only (λ_u=0)",    RecommenderEngine(alpha=0.8, beta=0.6, gamma=0.0, k_target=25, lambda_max=0.0)),
+        ("CF-Only (λ_u=1)",         RecommenderEngine(alpha=0.4, beta=0.6, gamma=0.0, k_target=25, lambda_max=1.0)),
         ("Switching Hybrid (Bool)", RecommenderEngine(alpha=0.4, beta=0.6, gamma=0.0, k_target=25, lambda_max=1.0, hard_switch=True)),
-        ("Adaptive Hybrid (Ours)", RecommenderEngine(alpha=0.4, beta=0.6, gamma=0.0, k_target=25, lambda_max=1.0))
+        ("Adaptive Hybrid (Ours)",  RecommenderEngine(alpha=0.4, beta=0.6, gamma=0.0, k_target=25, lambda_max=1.0))
     ]
 
     for name, base_rec in cold_models:
